@@ -10,6 +10,8 @@ output:
 
 library(readxl)
 library(ggplot2)
+library(dplyr)
+library(tidyr)
 
 knitr::opts_chunk$set(echo = FALSE)
 ```
@@ -29,6 +31,47 @@ ggplot(as.data.frame(table(factor(df$qContentRatingDay1, levels = 0:10))), aes(x
 ## Content Rating Day 2
 
 ```{r}
-ggplot(as.data.frame(table(factor(df$qContentRatingDay2, levels = 0:10))), aes(x=Var1, y=Freq)) + geom_bar(stat='identity', fill = 'darkred') + labs(x='score', y='count') + theme_bw()
+ggplot(as.data.frame(table(factor(df$qContentRatingDay2, levels = 0:10))), aes(x=Var1, y=Freq)) + geom_bar(stat='identity', fill = 'darkblue') + labs(x='score', y='count') + theme_bw()
+```
+
+## Hotels
+
+```{r}
+
+get_hotel <- function(hotel) {
+  h_list = list(
+    c(hotel = 'Sheraton', regex = 'sheraton|commander'),
+    c(hotel = 'Charles', regex = 'charles'),
+    c(hotel = 'Veritas', regex = 'veritas'),
+    c(hotel = 'Marriott', regex = 'courtyard|marriott'),
+    c(hotel = 'Hyatt', regex = 'hyatt|regency')
+  )
+  for (h in h_list) {
+    if (grepl(h[['regex']], hotel, ignore.case = TRUE)) return (h[['hotel']])
+  }
+  return('other')
+}
+
+df.hotels <- df %>%
+  select(response_name = qHotelName, rating = qHotelRating) %>%
+  filter(!is.na(response_name)) %>%
+  rowwise() %>%
+  mutate(hotel = get_hotel(response_name)) %>%
+  ungroup() %>%
+  select(-response_name) %>%
+  group_by(hotel) %>%
+  count(rating) %>%
+  complete(nesting(rating = 0:10)) %>%
+  mutate(n = ifelse(is.na(n), 0, n))
+
+unique_hotels <- sort(unique(df.hotels$hotel))
+if ('other' %in% unique_hotels) {
+  df.hotels$hotel <- factor(df.hotels$hotel, levels = c(unique_hotels[!unique_hotels == 'other'], 'other'))
+} else {
+  df.hotels$hotel <- factor(df.hotels$hotel, levels = unique_hotels)
+}
+
+ggplot(df.hotels, aes(x=rating, y=n)) + geom_bar(stat='identity') + facet_grid(. ~ hotel)
+
 ```
 
