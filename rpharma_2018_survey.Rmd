@@ -12,6 +12,7 @@ library(readxl)
 library(ggplot2)
 library(dplyr)
 library(tidyr)
+library(formattable)
 
 knitr::opts_chunk$set(echo = FALSE)
 ```
@@ -71,7 +72,34 @@ if ('other' %in% unique_hotels) {
   df.hotels$hotel <- factor(df.hotels$hotel, levels = unique_hotels)
 }
 
-ggplot(df.hotels, aes(x=rating, y=n)) + geom_bar(stat='identity') + facet_grid(. ~ hotel)
+ggplot(df.hotels, aes(x=rating, y=n)) + geom_bar(stat='identity', fill = 'darkgreen') + facet_grid(. ~ hotel)
 
 ```
+
+## Meeting Attendance
+
+```{r}
+
+df_attendance <- lapply(c('qAnnualYesNo', 'qAttendNextYear', 'qAttendIfFee'), function(x) {
+  df[, x] %>%
+    rename('response' = !!x) %>%
+    mutate(response = gsub(' ', '_', response)) %>%
+    group_by(response) %>%
+    count() %>%
+    ungroup() %>%
+    mutate(response = factor(response, levels = c('Yes', 'No', 'Not_sure'))) %>%
+    mutate('percent' = as.integer(100 * n / sum(n))) %>%
+    arrange(response)
+})
+  
+```
+
+#### Should this be an annual meeting?
+`r as.htmlwidget(formattable(df_attendance[[1]], list(percent = color_bar('lightblue', fun = function(x) x/100))), width = 500)`
+
+#### Will you attend next year?
+`r as.htmlwidget(formattable(df_attendance[[2]], list(percent = color_bar('lightblue', fun = function(x) x/100))), width = 500)`
+
+#### Would you pay a registration fee?
+`r as.htmlwidget(formattable(df_attendance[[3]], list(percent = color_bar('lightblue', fun = function(x) x/100))), width = 500)`
 
