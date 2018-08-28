@@ -23,7 +23,7 @@ df <- read_excel('./data/attendee_survey_26Aug2018.xlsx')
 
 ```
 
-## Content Rating
+## Talks and Keynotes
 
 ### Content Rating Day 1
 
@@ -43,13 +43,43 @@ ggplot(as.data.frame(table(factor(df$qKeynotesRating, levels = 0:10))), aes(x=Va
 ```
 
 ### Ratings for all Talks
-```{r}
+```{r, warning=FALSE}
 df.density = df[, c('qContentRatingDay1', 'qContentRatingDay2', 'qKeynotesRating')]
 names(df.density) <- c('day 1', 'day 2', 'keynote')
 df.density <- df.density %>%
   gather(day, rating)
 ggplot(df.density, aes(rating, color = day)) + geom_density() + labs(x='score', y='count') + theme_bw()
 ```
+
+## Workshops
+
+```{r}
+
+df_workshops <- lapply(c('qWorkshopDay1', 'qWorkshopDay2'), function(x) {
+  df_ws <- df[, x] %>%
+    rename('response' = !!x) %>%
+    filter(!is.na(response)) %>%
+    group_by(response) %>%
+    count() %>%
+    ungroup() %>%
+    mutate(response = factor(response)) %>%
+    mutate('percent' = as.integer(100 * n / sum(n)))
+  
+  not_attend <- which(startsWith(as.character(df_ws$response), 'I did not attend'))
+  v_order <- as.numeric(df_ws$response)
+  v_order[not_attend] <- length(v_order) + 1
+  df_ws$response <- reorder(df_ws$response, v_order)
+  df_ws %>% arrange(response)
+  
+})
+  
+```
+
+### Workshops Day 1
+`r as.htmlwidget(formattable(df_workshops[[1]], list(percent = color_bar('lightblue', fun = function(x) x/100))), width = 500)`
+
+### Workshops Day 2
+`r as.htmlwidget(formattable(df_workshops[[2]], list(percent = color_bar('lightblue', fun = function(x) x/100))), width = 500)`
 
 
 ## Hotels
@@ -93,7 +123,7 @@ ggplot(df.hotels, aes(x=rating, y=n)) + geom_bar(stat='identity', fill = 'darkgr
 
 ```
 
-## Meeting Attendance
+## 2019
 
 ```{r}
 
@@ -111,12 +141,12 @@ df_attendance <- lapply(c('qAnnualYesNo', 'qAttendNextYear', 'qAttendIfFee'), fu
   
 ```
 
-#### Should this be an annual meeting?
+### Should this be an annual meeting?
 `r as.htmlwidget(formattable(df_attendance[[1]], list(percent = color_bar('lightblue', fun = function(x) x/100))), width = 500)`
 
-#### Will you attend next year?
+### Will you attend next year?
 `r as.htmlwidget(formattable(df_attendance[[2]], list(percent = color_bar('lightblue', fun = function(x) x/100))), width = 500)`
 
-#### Would you pay a registration fee?
+### Would you pay a registration fee?
 `r as.htmlwidget(formattable(df_attendance[[3]], list(percent = color_bar('lightblue', fun = function(x) x/100))), width = 500)`
 
