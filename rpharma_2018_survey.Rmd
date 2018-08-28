@@ -19,21 +19,38 @@ knitr::opts_chunk$set(echo = FALSE)
 
 ```{r}
 
-df <- read_excel('./data/attendee_survey_24Aug2018.xlsx')
+df <- read_excel('./data/attendee_survey_26Aug2018.xlsx')
 
 ```
 
-## Content Rating Day 1
+## Content Rating
+
+### Content Rating Day 1
 
 ```{r}
 ggplot(as.data.frame(table(factor(df$qContentRatingDay1, levels = 0:10))), aes(x=Var1, y=Freq)) + geom_bar(stat='identity', fill = 'darkred') + labs(x='score', y='count') + theme_bw()
 ```
 
-## Content Rating Day 2
+### Content Rating Day 2
 
 ```{r}
 ggplot(as.data.frame(table(factor(df$qContentRatingDay2, levels = 0:10))), aes(x=Var1, y=Freq)) + geom_bar(stat='identity', fill = 'darkblue') + labs(x='score', y='count') + theme_bw()
 ```
+
+### Keynote Rating
+```{r}
+ggplot(as.data.frame(table(factor(df$qKeynotesRating, levels = 0:10))), aes(x=Var1, y=Freq)) + geom_bar(stat='identity', fill = 'darkgreen') + labs(x='score', y='count') + theme_bw()
+```
+
+### Ratings for all Talks
+```{r}
+df.density = df[, c('qContentRatingDay1', 'qContentRatingDay2', 'qKeynotesRating')]
+names(df.density) <- c('day 1', 'day 2', 'keynote')
+df.density <- df.density %>%
+  gather(day, rating)
+ggplot(df.density, aes(rating, color = day)) + geom_density() + labs(x='score', y='count') + theme_bw()
+```
+
 
 ## Hotels
 
