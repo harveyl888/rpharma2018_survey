@@ -381,3 +381,12 @@ HTML('</div>')
 HTML('<br/><br/>')
 
 ```
+
+## Demographics
+
+```{r}
+ggplot(df, aes(x=Country)) + 
+  geom_bar(fill = 'darkgreen') + 
+  theme_bw() + 
+  coord_flip()
+```
