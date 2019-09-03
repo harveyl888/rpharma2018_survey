@@ -25,7 +25,7 @@ knitr::opts_chunk$set(echo = FALSE)
 
 ```{r}
 
-df <- read_excel('./data/attendee_survey_26Aug2018.xlsx')
+df <- read_excel('./data/export_survey_13Sep2018.xlsx')
 
 ```
 
@@ -96,8 +96,10 @@ get_hotel <- function(hotel) {
   h_list = list(
     c(hotel = 'Sheraton', regex = 'sheraton|commander'),
     c(hotel = 'Charles', regex = 'charles'),
+    c(hotel = 'Hilton Back Bay', regex = 'hilton'),
     c(hotel = 'Veritas', regex = 'veritas'),
     c(hotel = 'Marriott', regex = 'courtyard|marriott'),
+    c(hotel = 'Le Meridien', regex = 'meridien|meridian'),
     c(hotel = 'Hyatt', regex = 'hyatt|regency')
   )
   for (h in h_list) {
@@ -125,7 +127,7 @@ if ('other' %in% unique_hotels) {
   df.hotels$hotel <- factor(df.hotels$hotel, levels = unique_hotels)
 }
 
-ggplot(df.hotels, aes(x=rating, y=n)) + geom_bar(stat='identity', fill = 'darkgreen') + facet_grid(. ~ hotel)
+ggplot(df.hotels, aes(x=rating, y=n)) + geom_bar(stat='identity', fill = 'darkgreen') + facet_grid(. ~ hotel) + scale_x_continuous(breaks = c(0,5,10))
 
 ```
 
