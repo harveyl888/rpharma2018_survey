@@ -1,0 +1,387 @@
+---
+title: "R/Pharma 2019 Survey"
+output:
+  html_document:
+    theme: cerulean
+    highlight: pygments
+
+---
+
+```{r setup, include=FALSE, warning=FALSE}
+
+library(readxl)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(formattable)
+library(htmltools)
+library(tm)
+library(tidytext)
+library(wordcloud)
+library(RColorBrewer)
+
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r}
+
+df <- read_excel('./data/export-2019_Attendee_Survey_30Oct2019.xlsx')
+
+```
+
+
+## Workshops
+
+```{r}
+
+df_workshops <- lapply(c('qMorningWorkshop', 'qAfternoonWorkshop'), function(x) {
+  df_ws <- df[, x] %>%
+    rename('response' = !!x) %>%
+    filter(!is.na(response)) %>%
+    group_by(response) %>%
+    count() %>%
+    ungroup() %>%
+    mutate(response = factor(response)) %>%
+    mutate('percent' = as.integer(100 * n / sum(n)))
+  
+  not_attend <- which(startsWith(as.character(df_ws$response), 'I did not attend'))
+  v_order <- as.numeric(df_ws$response)
+  v_order[not_attend] <- length(v_order) + 1
+  df_ws$response <- reorder(df_ws$response, v_order)
+  df_ws %>% arrange(response)
+  
+})
+  
+```
+
+### Morning Workshops
+`r as.htmlwidget(formattable(df_workshops[[1]], list(percent = color_bar('lightblue', fun = function(x) x/100))), width = 500)`
+
+```{r}
+ggplot(as.data.frame(table(factor(df$qRatingWorkshopMorningNPS, levels = 0:10))), aes(x=Var1, y=Freq)) + geom_bar(stat='identity', fill = 'darkred') + labs(x='score', y='count') + theme_bw()
+```
+
+
+### Afternoon Workshops
+`r as.htmlwidget(formattable(df_workshops[[2]], list(percent = color_bar('lightblue', fun = function(x) x/100))), width = 500)`
+
+```{r}
+ggplot(as.data.frame(table(factor(df$qRatingWorkshopAfternoonNPS, levels = 0:10))), aes(x=Var1, y=Freq)) + geom_bar(stat='identity', fill = 'darkred') + labs(x='score', y='count') + theme_bw()
+```
+
+
+## Talks and Keynotes
+
+### Content Rating
+
+```{r}
+ggplot(as.data.frame(table(factor(df$qContentRatingNPS, levels = 0:10))), aes(x=Var1, y=Freq)) + geom_bar(stat='identity', fill = 'darkred') + labs(x='score', y='count') + theme_bw()
+```
+
+### Keynote Rating
+```{r}
+ggplot(as.data.frame(table(factor(df$qKeynotesRatingNPS, levels = 0:10))), aes(x=Var1, y=Freq)) + geom_bar(stat='identity', fill = 'darkgreen') + labs(x='score', y='count') + theme_bw()
+```
+
+### Ratings for all Talks
+```{r, warning=FALSE}
+df.density = df[, c('qContentRatingNPS', 'qKeynotesRatingNPS')]
+names(df.density) <- c('talks', 'keynotes')
+df.density <- df.density %>%
+  gather(day, rating)
+ggplot(df.density, aes(rating, color = day)) + geom_density() + labs(x='score', y='count') + theme_bw()
+```
+
+## Hotels
+
+```{r}
+
+get_hotel <- function(hotel) {
+  h_list = list(
+    c(hotel = 'Sheraton', regex = 'sheraton|commander|recommended'),
+    c(hotel = 'Charles', regex = 'charles'),
+    c(hotel = 'Veritas', regex = 'veritas'),
+    c(hotel = 'Hotel 1868', regex = '1868'),
+    c(hotel = 'Hyatt', regex = 'hyatt|regency'),
+    c(hotel = 'Friendly Inn', regex = 'friendly')
+  )
+  for (h in h_list) {
+    if (grepl(h[['regex']], hotel, ignore.case = TRUE)) return (h[['hotel']])
+  }
+  return('other')
+}
+
+df.hotels <- df %>%
+  select(response_name = qHotelName, rating = qHotelRatingNPS) %>%
+  filter(!is.na(response_name)) %>%
+  rowwise() %>%
+  mutate(hotel = get_hotel(response_name)) %>%
+  ungroup() %>%
+  select(-response_name) %>%
+  group_by(hotel) %>%
+  count(rating) %>%
+  complete(nesting(rating = 0:10)) %>%
+  mutate(n = ifelse(is.na(n), 0, n))
+
+unique_hotels <- sort(unique(df.hotels$hotel))
+if ('other' %in% unique_hotels) {
+  df.hotels$hotel <- factor(df.hotels$hotel, levels = c(unique_hotels[!unique_hotels == 'other'], 'other'))
+} else {
+  df.hotels$hotel <- factor(df.hotels$hotel, levels = unique_hotels)
+}
+
+ggplot(df.hotels, aes(x=rating, y=n)) + geom_bar(stat='identity', fill = 'darkgreen') + facet_grid(. ~ hotel) + scale_x_continuous(breaks = c(0,5,10))
+
+```
+
+```{r sentiment_analysis}
+
+df_sentiment <- df %>%
+  select(qCommentsNextYear, qComments, qWhatDidYouLikeMost, qFormatComments, qHowConvenientWasDate, qOneThingBetter
+) %>%
+  gather(question, response) %>%
+  unnest_tokens(word, response) %>%
+  inner_join(get_sentiments('bing'), by = 'word') %>%
+  group_by(question) %>%
+  count(sentiment) %>%
+  mutate(percent = as.integer(100 * n / sum(n))) %>%
+  complete(question, sentiment = c('positive', 'negative'), fill = list(n = 0, percent = 0))
+
+```
+
+
+## 2020
+
+```{r}
+
+df_threechoice <- lapply(c('qAnnual_YesNo', 'qAttendNextYear_YesNo', 'qAttendIfFee_YesNo'), function(x) {
+  df[, x] %>%
+    rename('response' = !!x) %>%
+    filter(!is.na(response)) %>%
+    mutate(response = gsub(' ', '_', response)) %>%
+    group_by(response) %>%
+    count() %>%
+    ungroup() %>%
+    mutate(response = factor(response, levels = c('Yes', 'No', 'Not_sure'))) %>%
+    mutate('percent' = as.integer(100 * n / sum(n))) %>%
+    arrange(response)
+})
+  
+```
+
+### Should this be an annual meeting?
+`r as.htmlwidget(formattable(df_threechoice[[1]], list(percent = color_bar('lightblue', fun = function(x) x/100))), width = 500)`
+
+### Will you attend next year?
+`r as.htmlwidget(formattable(df_threechoice[[2]], list(percent = color_bar('lightblue', fun = function(x) x/100))), width = 500)`
+
+### Would you pay a registration fee?
+`r as.htmlwidget(formattable(df_threechoice[[3]], list(percent = color_bar('lightblue', fun = function(x) x/100))), width = 500)`
+
+### Comments Regarding Location
+
+```{r, warning=FALSE, results='asis'}
+wordcloud(df$qCommentsNextYear, min.freq = 1, max.words = 100, random.order = F, rot.per = 0.35, colors = brewer.pal(8, "Dark2"))
+```
+
+```{r}
+ggplot(df_sentiment %>% filter(question == 'qComments'), aes(x = sentiment, y = percent, fill = sentiment)) + 
+  geom_bar(stat = 'identity') +
+  ggtitle('Sentiment Analysis') +
+  scale_y_continuous(limits = c(0, 100)) +
+  coord_flip() +
+  theme_bw() + 
+  theme(legend.position='none')
+```
+
+```{r, results = 'asis'}
+df_comments <- df[, 'qCommentsNextYear'] %>% filter(!is.na(qCommentsNextYear))
+row.names(df_comments) <- NULL
+
+
+HTML('<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.2.0/css/all.css" integrity="sha384-hWVjflwFxL6sNzntih27bfxkr27PmbbK/iSvJ+a4+0owXq79v+lsFkW54bOGbiDQ" crossorigin="anonymous">
+      <div class="row">
+        <div class="col-md-12">
+          <button type="button" class="btn btn-warning btn-sm code-folding-btn" data-toggle="collapse" data-target="#table_resp1" aria-expanded="false">
+            <span><i class="fas fa-plus-square" style="display: inline-block; margin-right: 10px;"></i>Conference Location Comments</span>
+          </button>
+        </div>
+      </div>
+<div id="table_resp1" class="collapse">')
+format_table(df_comments, align = c('l'), col.names = NULL)
+HTML('</div>')
+
+```
+
+
+## Format, Date and Venue
+
+### Location
+
+```{r}
+ggplot(as.data.frame(table(factor(df$qVenueNPS, levels = 0:10))), aes(x=Var1, y=Freq)) + geom_bar(stat='identity', fill = 'darkred') + labs(x='score', y='count') + theme_bw()
+```
+
+### Convenience of Date
+
+```{r, warning=FALSE, results='asis'}
+wordcloud(df$qHowConvenientWasDate, min.freq = 1, max.words = 100, random.order = F, rot.per = 0.35, colors = brewer.pal(8, "Dark2"))
+```
+
+```{r}
+ggplot(df_sentiment %>% filter(question == 'qHowConvenientWasDate'), aes(x = sentiment, y = percent, fill = sentiment)) + 
+  geom_bar(stat = 'identity') +
+  ggtitle('Sentiment Analysis') +
+  scale_y_continuous(limits = c(0, 100)) +
+  coord_flip() +
+  theme_bw() + 
+  theme(legend.position='none')
+```
+
+```{r, results = 'asis'}
+df_comments <- df[, 'qHowConvenientWasDate'] %>% filter(!is.na(qHowConvenientWasDate))
+row.names(df_comments) <- NULL
+
+
+HTML('<div class="row">
+        <div class="col-md-12">
+          <button type="button" class="btn btn-warning btn-sm code-folding-btn" data-toggle="collapse" data-target="#table_resp2" aria-expanded="false">
+            <span><i class="fas fa-plus-square" style="display: inline-block; margin-right: 10px;"></i>Conference Date Comments</span>
+          </button>
+        </div>
+      </div>
+<div id="table_resp2" class="collapse">')
+format_table(df_comments, align = c('l'), col.names = NULL)
+HTML('</div>')
+
+```
+
+
+### General Format
+
+```{r, warning=FALSE, results='asis'}
+wordcloud(df$qFormatComments, min.freq = 1, max.words = 100, random.order = F, rot.per = 0.35, colors = brewer.pal(8, "Dark2"))
+```
+
+```{r}
+ggplot(df_sentiment %>% filter(question == 'qFormatComments'), aes(x = sentiment, y = percent, fill = sentiment)) + 
+  geom_bar(stat = 'identity') +
+  ggtitle('Sentiment Analysis') +
+  scale_y_continuous(limits = c(0, 100)) +
+  coord_flip() +
+  theme_bw() + 
+  theme(legend.position='none')
+```
+
+```{r, results = 'asis'}
+df_comments <- df[, 'qFormatComments'] %>% filter(!is.na(qFormatComments))
+row.names(df_comments) <- NULL
+
+
+HTML('<div class="row">
+        <div class="col-md-12">
+          <button type="button" class="btn btn-warning btn-sm code-folding-btn" data-toggle="collapse" data-target="#table_resp3" aria-expanded="false">
+            <span><i class="fas fa-plus-square" style="display: inline-block; margin-right: 10px;"></i>General Format Comments</span>
+          </button>
+        </div>
+      </div>
+<div id="table_resp3" class="collapse">')
+format_table(df_comments, align = c('l'), col.names = NULL)
+HTML('</div>')
+
+```
+
+## Communication
+
+### Electronic Program
+```{r}
+ggplot(as.data.frame(table(factor(df$qProgramRatingNPS, levels = 0:10))), aes(x=Var1, y=Freq)) + geom_bar(stat='identity', fill = 'darkblue') + labs(x='score', y='count') + theme_bw()
+```
+
+
+## Comments
+
+### What Did You Like Most?
+
+```{r, warning=FALSE, results='asis'}
+wordcloud(df$qWhatDidYouLikeMost, min.freq = 1, max.words = 100, random.order = F, rot.per = 0.35, colors = brewer.pal(8, "Dark2"))
+```
+
+```{r, results = 'asis'}
+df_comments <- df[, 'qWhatDidYouLikeMost'] %>% filter(!is.na(qWhatDidYouLikeMost))
+row.names(df_comments) <- NULL
+
+
+HTML('<div class="row">
+        <div class="col-md-12">
+          <button type="button" class="btn btn-warning btn-sm code-folding-btn" data-toggle="collapse" data-target="#table_resp4" aria-expanded="false">
+            <span><i class="fas fa-plus-square" style="display: inline-block; margin-right: 10px;"></i>What Did You Like Most?</span>
+          </button>
+        </div>
+      </div>
+<div id="table_resp4" class="collapse">')
+format_table(df_comments, align = c('l'), col.names = NULL)
+HTML('</div>')
+
+```
+
+
+### What Could We Do Better?
+
+```{r, warning=FALSE, results='asis'}
+wordcloud(df$qOneThingBetter, min.freq = 1, max.words = 100, random.order = F, rot.per = 0.35, colors = brewer.pal(8, "Dark2"))
+```
+
+```{r, results = 'asis'}
+df_comments <- df[, 'qOneThingBetter'] %>% filter(!is.na(qOneThingBetter))
+row.names(df_comments) <- NULL
+
+
+HTML('<div class="row">
+        <div class="col-md-12">
+          <button type="button" class="btn btn-warning btn-sm code-folding-btn" data-toggle="collapse" data-target="#table_resp5" aria-expanded="false">
+            <span><i class="fas fa-plus-square" style="display: inline-block; margin-right: 10px;"></i>What Could We Do Better?</span>
+          </button>
+        </div>
+      </div>
+<div id="table_resp5" class="collapse">')
+format_table(df_comments, align = c('l'), col.names = NULL)
+HTML('</div>')
+
+```
+
+### Additional Comments
+
+```{r, warning=FALSE, results='asis'}
+wordcloud(df$qComments, min.freq = 1, max.words = 100, random.order = F, rot.per = 0.35, colors = brewer.pal(8, "Dark2"))
+```
+
+```{r}
+ggplot(df_sentiment %>% filter(question == 'qComments'), aes(x = sentiment, y = percent, fill = sentiment)) + 
+  geom_bar(stat = 'identity') +
+  ggtitle('Sentiment Analysis') +
+  scale_y_continuous(limits = c(0, 100)) +
+  coord_flip() +
+  theme_bw() + 
+  theme(legend.position='none')
+```
+
+```{r, results = 'asis'}
+df_comments <- df[, 'qComments'] %>% filter(!is.na(qComments))
+row.names(df_comments) <- NULL
+
+
+HTML('<div class="row">
+        <div class="col-md-12">
+          <button type="button" class="btn btn-warning btn-sm code-folding-btn" data-toggle="collapse" data-target="#table_resp6" aria-expanded="false">
+            <span><i class="fas fa-plus-square" style="display: inline-block; margin-right: 10px;"></i>Additional Comments</span>
+          </button>
+        </div>
+      </div>
+<div id="table_resp6" class="collapse">')
+format_table(df_comments, align = c('l'), col.names = NULL)
+HTML('</div>')
+HTML('<br/><br/>')
+
+```
+
