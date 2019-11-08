@@ -318,6 +318,20 @@ HTML('</div>')
 
 ```
 
+## Food at the venue
+
+### Snacks
+
+```{r}
+ggplot(as.data.frame(table(factor(df$qSnacksNPS, levels = 0:10))), aes(x=Var1, y=Freq)) + geom_bar(stat='identity', fill = col_bar) + labs(x='score', y='count') + theme_bw()
+```
+
+### Lunches
+
+```{r}
+ggplot(as.data.frame(table(factor(df$qLunchesNPS, levels = 0:10))), aes(x=Var1, y=Freq)) + geom_bar(stat='identity', fill = col_bar) + labs(x='score', y='count') + theme_bw()
+```
+
 
 ## Mixer
 
