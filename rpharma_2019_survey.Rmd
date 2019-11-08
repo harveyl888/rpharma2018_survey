@@ -26,8 +26,45 @@ knitr::opts_chunk$set(echo = FALSE)
 ```{r}
 
 df <- read_excel('./data/export-2019_Attendee_Survey_30Oct2019.xlsx')
+col_bar <- '#b71c1c'
+col_percent <- '#81D4FA'
 
 ```
+
+
+```{r}
+
+df_threechoice <- lapply(c('qAnnual_YesNo', 'qAttendNextYear_YesNo', 'qAttendIfFee_YesNo', 'qBreakoutIn2020_YesNo'), function(x) {
+  df[, x] %>%
+    rename('response' = !!x) %>%
+    filter(!is.na(response)) %>%
+    mutate(response = gsub(' ', '_', response)) %>%
+    group_by(response) %>%
+    count() %>%
+    ungroup() %>%
+    mutate(response = factor(response, levels = c('Yes', 'No', 'Not_sure'))) %>%
+    mutate('percent' = as.integer(100 * n / sum(n))) %>%
+    arrange(response)
+})
+  
+```
+
+
+```{r sentiment_analysis}
+
+df_sentiment <- df %>%
+  select(qCommentsNextYear, qComments, qWhatDidYouLikeMost, qFormatComments, qHowConvenientWasDate, qOneThingBetter, qMixerFeedback
+) %>%
+  gather(question, response) %>%
+  unnest_tokens(word, response) %>%
+  inner_join(get_sentiments('bing'), by = 'word') %>%
+  group_by(question) %>%
+  count(sentiment) %>%
+  mutate(percent = as.integer(100 * n / sum(n))) %>%
+  complete(question, sentiment = c('positive', 'negative'), fill = list(n = 0, percent = 0))
+
+```
+
 
 
 ## Workshops
@@ -55,19 +92,42 @@ df_workshops <- lapply(c('qMorningWorkshop', 'qAfternoonWorkshop'), function(x) 
 ```
 
 ### Morning Workshops
-`r as.htmlwidget(formattable(df_workshops[[1]], list(percent = color_bar('lightblue', fun = function(x) x/100))), width = 500)`
+`r as.htmlwidget(formattable(df_workshops[[1]], list(percent = color_bar(col_percent, fun = function(x) x/100))), width = 600)`
 
 ```{r}
-ggplot(as.data.frame(table(factor(df$qRatingWorkshopMorningNPS, levels = 0:10))), aes(x=Var1, y=Freq)) + geom_bar(stat='identity', fill = 'darkred') + labs(x='score', y='count') + theme_bw()
+ggplot(as.data.frame(table(factor(df$qRatingWorkshopMorningNPS, levels = 0:10))), aes(x=Var1, y=Freq)) + geom_bar(stat='identity', fill = col_bar) + labs(x='score', y='count') + theme_bw()
 ```
 
 
 ### Afternoon Workshops
-`r as.htmlwidget(formattable(df_workshops[[2]], list(percent = color_bar('lightblue', fun = function(x) x/100))), width = 500)`
+`r as.htmlwidget(formattable(df_workshops[[2]], list(percent = color_bar(col_percent, fun = function(x) x/100))), width = 600)`
 
 ```{r}
-ggplot(as.data.frame(table(factor(df$qRatingWorkshopAfternoonNPS, levels = 0:10))), aes(x=Var1, y=Freq)) + geom_bar(stat='identity', fill = 'darkred') + labs(x='score', y='count') + theme_bw()
+ggplot(as.data.frame(table(factor(df$qRatingWorkshopAfternoonNPS, levels = 0:10))), aes(x=Var1, y=Freq)) + geom_bar(stat='identity', fill = col_bar) + labs(x='score', y='count') + theme_bw()
 ```
+
+
+## Morning Coffee
+
+### Which coffee sessions did you attend?
+
+```{r}
+
+  df_coffee <- df %>%
+    select(contains('qCoffeeWithSessions'))
+  coffee_attendance <- apply(df_coffee, 2, function(x) sum(!is.na(x)))
+  names(coffee_attendance) <- sapply(names(coffee_attendance), function(x) substr(x, 1, nchar(x) - 20))
+  df_coffee_attendance <- data.frame('Coffee Morning' = names(coffee_attendance), Attended = coffee_attendance, stringsAsFactors = FALSE)
+  row.names(df_coffee_attendance) <- NULL
+  
+  as.htmlwidget(formattable(df_coffee_attendance, list(), width = 500))
+
+```
+
+`r as.htmlwidget(formattable(df_coffee_attendance, list()), width = 600)`
+
+### Should we keep coffee sessions next year?
+`r as.htmlwidget(formattable(df_threechoice[[4]], list(percent = color_bar(col_percent, fun = function(x) x/100))), width = 500)`
 
 
 ## Talks and Keynotes
@@ -75,12 +135,12 @@ ggplot(as.data.frame(table(factor(df$qRatingWorkshopAfternoonNPS, levels = 0:10)
 ### Content Rating
 
 ```{r}
-ggplot(as.data.frame(table(factor(df$qContentRatingNPS, levels = 0:10))), aes(x=Var1, y=Freq)) + geom_bar(stat='identity', fill = 'darkred') + labs(x='score', y='count') + theme_bw()
+ggplot(as.data.frame(table(factor(df$qContentRatingNPS, levels = 0:10))), aes(x=Var1, y=Freq)) + geom_bar(stat='identity', fill = col_bar) + labs(x='score', y='count') + theme_bw()
 ```
 
 ### Keynote Rating
 ```{r}
-ggplot(as.data.frame(table(factor(df$qKeynotesRatingNPS, levels = 0:10))), aes(x=Var1, y=Freq)) + geom_bar(stat='identity', fill = 'darkgreen') + labs(x='score', y='count') + theme_bw()
+ggplot(as.data.frame(table(factor(df$qKeynotesRatingNPS, levels = 0:10))), aes(x=Var1, y=Freq)) + geom_bar(stat='identity', fill = col_bar) + labs(x='score', y='count') + theme_bw()
 ```
 
 ### Ratings for all Talks
@@ -130,53 +190,20 @@ if ('other' %in% unique_hotels) {
   df.hotels$hotel <- factor(df.hotels$hotel, levels = unique_hotels)
 }
 
-ggplot(df.hotels, aes(x=rating, y=n)) + geom_bar(stat='identity', fill = 'darkgreen') + facet_grid(. ~ hotel) + scale_x_continuous(breaks = c(0,5,10))
+ggplot(df.hotels, aes(x=rating, y=n)) + geom_bar(stat='identity', fill = col_bar) + facet_grid(. ~ hotel) + scale_x_continuous(breaks = c(0,5,10))
 
 ```
-
-```{r sentiment_analysis}
-
-df_sentiment <- df %>%
-  select(qCommentsNextYear, qComments, qWhatDidYouLikeMost, qFormatComments, qHowConvenientWasDate, qOneThingBetter
-) %>%
-  gather(question, response) %>%
-  unnest_tokens(word, response) %>%
-  inner_join(get_sentiments('bing'), by = 'word') %>%
-  group_by(question) %>%
-  count(sentiment) %>%
-  mutate(percent = as.integer(100 * n / sum(n))) %>%
-  complete(question, sentiment = c('positive', 'negative'), fill = list(n = 0, percent = 0))
-
-```
-
 
 ## 2020
 
-```{r}
-
-df_threechoice <- lapply(c('qAnnual_YesNo', 'qAttendNextYear_YesNo', 'qAttendIfFee_YesNo'), function(x) {
-  df[, x] %>%
-    rename('response' = !!x) %>%
-    filter(!is.na(response)) %>%
-    mutate(response = gsub(' ', '_', response)) %>%
-    group_by(response) %>%
-    count() %>%
-    ungroup() %>%
-    mutate(response = factor(response, levels = c('Yes', 'No', 'Not_sure'))) %>%
-    mutate('percent' = as.integer(100 * n / sum(n))) %>%
-    arrange(response)
-})
-  
-```
-
 ### Should this be an annual meeting?
-`r as.htmlwidget(formattable(df_threechoice[[1]], list(percent = color_bar('lightblue', fun = function(x) x/100))), width = 500)`
+`r as.htmlwidget(formattable(df_threechoice[[1]], list(percent = color_bar(col_percent, fun = function(x) x/100))), width = 500)`
 
 ### Will you attend next year?
-`r as.htmlwidget(formattable(df_threechoice[[2]], list(percent = color_bar('lightblue', fun = function(x) x/100))), width = 500)`
+`r as.htmlwidget(formattable(df_threechoice[[2]], list(percent = color_bar(col_percent, fun = function(x) x/100))), width = 500)`
 
 ### Would you pay a registration fee?
-`r as.htmlwidget(formattable(df_threechoice[[3]], list(percent = color_bar('lightblue', fun = function(x) x/100))), width = 500)`
+`r as.htmlwidget(formattable(df_threechoice[[3]], list(percent = color_bar(col_percent, fun = function(x) x/100))), width = 500)`
 
 ### Comments Regarding Location
 
@@ -219,7 +246,7 @@ HTML('</div>')
 ### Location
 
 ```{r}
-ggplot(as.data.frame(table(factor(df$qVenueNPS, levels = 0:10))), aes(x=Var1, y=Freq)) + geom_bar(stat='identity', fill = 'darkred') + labs(x='score', y='count') + theme_bw()
+ggplot(as.data.frame(table(factor(df$qVenueNPS, levels = 0:10))), aes(x=Var1, y=Freq)) + geom_bar(stat='identity', fill = col_bar) + labs(x='score', y='count') + theme_bw()
 ```
 
 ### Convenience of Date
@@ -291,11 +318,58 @@ HTML('</div>')
 
 ```
 
+
+## Mixer
+
+### Mixer Rating
+
+```{r}
+ggplot(as.data.frame(table(factor(df$qMixerNPS, levels = 0:10))), aes(x=Var1, y=Freq)) + geom_bar(stat='identity', fill = col_bar) + labs(x='score', y='count') + theme_bw()
+```
+
+
+### How was the mixer?
+
+```{r, warning=FALSE, results='asis'}
+wordcloud(df$qMixerFeedback, min.freq = 1, max.words = 100, random.order = F, rot.per = 0.35, colors = brewer.pal(8, "Dark2"))
+```
+
+```{r}
+ggplot(df_sentiment %>% filter(question == 'qMixerFeedback'), aes(x = sentiment, y = percent, fill = sentiment)) + 
+  geom_bar(stat = 'identity') +
+  ggtitle('Sentiment Analysis') +
+  scale_y_continuous(limits = c(0, 100)) +
+  coord_flip() +
+  theme_bw() + 
+  theme(legend.position='none')
+```
+
+```{r, results = 'asis'}
+df_comments <- df[, 'qMixerFeedback'] %>% filter(!is.na(qMixerFeedback))
+row.names(df_comments) <- NULL
+
+
+HTML('<div class="row">
+        <div class="col-md-12">
+          <button type="button" class="btn btn-warning btn-sm code-folding-btn" data-toggle="collapse" data-target="#table_resp7" aria-expanded="false">
+            <span><i class="fas fa-plus-square" style="display: inline-block; margin-right: 10px;"></i>Mixer Comments</span>
+          </button>
+        </div>
+      </div>
+<div id="table_resp7" class="collapse">')
+format_table(df_comments, align = c('l'), col.names = NULL)
+HTML('</div>')
+
+```
+
+
+
+
 ## Communication
 
-### Electronic Program
+### Electronic Program / App
 ```{r}
-ggplot(as.data.frame(table(factor(df$qProgramRatingNPS, levels = 0:10))), aes(x=Var1, y=Freq)) + geom_bar(stat='identity', fill = 'darkblue') + labs(x='score', y='count') + theme_bw()
+ggplot(as.data.frame(table(factor(df$qProgramRatingNPS, levels = 0:10))), aes(x=Var1, y=Freq)) + geom_bar(stat='identity', fill = col_bar) + labs(x='score', y='count') + theme_bw()
 ```
 
 
