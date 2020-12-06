@@ -95,6 +95,33 @@ ggplot(df.density, aes(rating, color = day)) + geom_density() + labs(x='score', 
 ```
 
 
+### Talks and Keynotes - What did you like most
+
+```{r, warning=FALSE, results='asis'}
+wordcloud(df$qLikedMost, min.freq = 1, max.words = 100, random.order = F, rot.per = 0.35, colors = brewer.pal(8, "Dark2"))
+```
+
+
+```{r, results = 'asis'}
+df_comments <- df[, 'qLikedMost'] %>% filter(!is.na(qLikedMost))
+row.names(df_comments) <- NULL
+
+
+HTML('<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.2.0/css/all.css" integrity="sha384-hWVjflwFxL6sNzntih27bfxkr27PmbbK/iSvJ+a4+0owXq79v+lsFkW54bOGbiDQ" crossorigin="anonymous">
+      <div class="row">
+        <div class="col-md-12">
+          <button type="button" class="btn btn-warning btn-sm code-folding-btn" data-toggle="collapse" data-target="#table_resp8" aria-expanded="false">
+            <span><i class="fas fa-plus-square" style="display: inline-block; margin-right: 10px;"></i>Talks and Keynotes - What did you like most</span>
+          </button>
+        </div>
+      </div>
+<div id="table_resp8" class="collapse">')
+format_table(df_comments, align = c('l'), col.names = NULL)
+HTML('</div>')
+
+```
+
+
 ## The Platform
 
 ```{r}
@@ -129,6 +156,10 @@ HTML('</div>')
 ```{r}
 ggplot(as.data.frame(table(factor(df$qProgramRatingNPS, levels = 0:10))), aes(x=Var1, y=Freq)) + geom_bar(stat='identity', fill = col_bar) + labs(x='score', y='count') + theme_bw()
 ```
+
+### Will you continue to use Slack
+
+`r as.htmlwidget(formattable(df_threechoice[[3]], list(percent = color_bar(col_percent, fun = function(x) x/100))), width = 500)`
 
 
 ## 2021
